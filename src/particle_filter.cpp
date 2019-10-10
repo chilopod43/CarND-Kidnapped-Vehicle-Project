@@ -30,7 +30,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
      * NOTE: Consult particle_filter.h for more information about this method 
      *   (and others in this file).
      */
-    num_particles = 100;  // Set the number of particles
+    num_particles = 50;  // Set the number of particles
     std::default_random_engine gen;
     double std_x, std_y, std_theta;  // Standard deviations for x, y, and theta
 
@@ -51,6 +51,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
         sample_theta = dist_theta(gen);   
         particles.push_back(Particle{i, sample_x, sample_y, sample_theta, 1.0});
     }
+    is_initialized = true;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
@@ -72,10 +73,16 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
 
         auto& p = particles[i];
 
-        p.x = p.x + velocity / yaw_rate * (sin(p.theta + yaw_rate * delta_t ) - sin( p.theta));
-        p.y = p.y + velocity / yaw_rate * (cos(p.theta) - cos(p.theta + yaw_rate * delta_t));
-        p.theta = p.theta + yaw_rate * delta_t;
-    
+        if (fabs(yaw_rate) > 1e-5 ) {
+            double new_theta = p.theta + yaw_rate * delta_t; 
+            p.x = p.x + velocity / yaw_rate * (sin(new_theta) - sin(p.theta));
+            p.y = p.y + velocity / yaw_rate * (cos(p.theta) - cos(new_theta));
+            p.theta = p.theta + yaw_rate * delta_t;
+        } else {
+            p.x = p.x + velocity * delta_t * cos(p.theta);
+            p.y = p.y + velocity * delta_t * sin(p.theta);
+        }
+
         p.x += dist_x(gen);
         p.y += dist_y(gen);
         p.theta += dist_theta(gen);
@@ -98,19 +105,18 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
     {
         auto& oobs = observations[i];
       
-        int tmpid = -1;
         double mind = std::numeric_limits<const double>::infinity();    
         for(size_t j=0; j<predicted.size(); j++)
         {
             auto& pobs = predicted[j];
+          
             double d = dist(oobs.x, oobs.y, pobs.x, pobs.y);
             if(d < mind)
             {
                 mind = d;
-                tmpid = pobs.id;
+                oobs.id = pobs.id;
             }
         }
-        oobs.id = tmpid;
     }
 }
 
@@ -157,7 +163,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
             auto& o = observations[oidx];
             double wld_ox = p.x + cos(p.theta) * o.x - sin(p.theta) * o.y;
             double wld_oy = p.y + sin(p.theta) * o.x + cos(p.theta) * o.y;
-            wld_obses.push_back(LandmarkObs{ o.id, wld_ox, wld_oy});
+            wld_obses.push_back(LandmarkObs{o.id, wld_ox, wld_oy});
         }
         dataAssociation(predicted, wld_obses);
 
@@ -165,6 +171,10 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         // update weights
         // -------------------------------------------------------------
         p.weight = 1.0;
+        std::vector<int> associations;
+        std::vector<double> sense_x;
+        std::vector<double> sense_y;
+
         for(size_t oidx = 0; oidx < wld_obses.size(); oidx++) 
         {
             auto& o = wld_obses[oidx];
@@ -176,7 +186,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
                 if(o.id == l.id)
                 {
                     tl = l;
-                	break;
+                    break;
                 }
             }
 
@@ -186,9 +196,15 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
             double xterm = (o.x - tl.x) * (o.x - tl.x) / (2 * uncertx * uncertx);
             double yterm = (o.y - tl.y) * (o.y - tl.y) / (2 * uncerty * uncerty);
             double prob = coeff * exp(-xterm-yterm);
-            p.weight *= (prob == 0.0) ? 1e-5 : prob;
+          
+            p.weight *= (prob == 0.0) ? 1e-7 : prob;
+            associations.push_back(o.id);
+            sense_x.push_back(o.x);
+            sense_y.push_back(o.y);
+
         }
         weights.push_back(p.weight);
+        SetAssociations(p, associations, sense_x, sense_y);
     }
 
 }
