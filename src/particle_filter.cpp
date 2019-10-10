@@ -94,13 +94,13 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
      *   during the updateWeights phase.
      */
     // landmarkobs: x,y,id
-    for(int i=0; i<observations.size(); i++)
+    for(size_t i=0; i<observations.size(); i++)
     {
         auto& oobs = observations[i];
       
         int tmpid = -1;
         double mind = std::numeric_limits<const double>::infinity();    
-        for(int j=0; j<predicted.size(); j++)
+        for(size_t j=0; j<predicted.size(); j++)
         {
             auto& pobs = predicted[j];
             double d = dist(oobs.x, oobs.y, pobs.x, pobs.y);
@@ -137,10 +137,10 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         auto& p = particles[pidx];
 
         // -------------------------------------------------------------
-      　// associate observations with landmarks
+        // associate observations with landmarks
         // -------------------------------------------------------------
         std::vector<LandmarkObs> predicted;
-        for(int lidx=0; lidx<map_landmarks.landmark_list.size(); lidx++) 
+        for(size_t lidx=0; lidx<map_landmarks.landmark_list.size(); lidx++) 
         {
             auto& l = map_landmarks.landmark_list[lidx];
 
@@ -152,7 +152,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         }
 
         std::vector<LandmarkObs> wld_obses;
-        for(int oidx=0; oidx<observations.size(); oidx++) 
+        for(size_t oidx=0; oidx<observations.size(); oidx++) 
         {
             auto& o = observations[oidx];
             double wld_ox = p.x + cos(p.theta) * o.x - sin(p.theta) * o.y;
@@ -162,20 +162,20 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         dataAssociation(predicted, wld_obses);
 
         // -------------------------------------------------------------
-      　// associate observations with landmarks
+        // update weights
         // -------------------------------------------------------------
         p.weight = 1.0;
-        for(int oidx = 0; oidx < wld_obses.size(); oidx++) 
+        for(size_t oidx = 0; oidx < wld_obses.size(); oidx++) 
         {
             auto& o = wld_obses[oidx];
           
-            LandmarkObs target_landmark;
-            for(int lidx=0; lidx<predicted.size(); lidx++)
+            LandmarkObs tl;
+            for(size_t lidx=0; lidx<predicted.size(); lidx++)
             {
                 auto& l = predicted[lidx];
                 if(o.id == l.id)
                 {
-                    target_landmark = l;
+                    tl = l;
                 	break;
                 }
             }
@@ -183,8 +183,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
             double uncertx = std_landmark[0];
             double uncerty = std_landmark[1];
             double coeff = 1 / (2 * M_PI * uncertx * uncerty);
-            double xterm = (o.x - l.x) * (o.x - l.x) / (2 * uncertx * uncertx);
-            double yterm = (o.y - l.y) * (o.y - l.y) / (2 * uncerty * uncerty);
+            double xterm = (o.x - tl.x) * (o.x - tl.x) / (2 * uncertx * uncertx);
+            double yterm = (o.y - tl.y) * (o.y - tl.y) / (2 * uncerty * uncerty);
             double prob = coeff * exp(-xterm-yterm);
             p.weight *= (prob == 0.0) ? 1e-5 : prob;
         }
@@ -200,10 +200,10 @@ void ParticleFilter::resample() {
      * NOTE: You may find std::discrete_distribution helpful here.
      *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
      */
-    // Get weights and max weight.
+    std::default_random_engine gen;
     std::uniform_int_distribution<int> dist_idx(0, num_particles - 1);
-    double maxw = std::max_element(weights.begin(), weights.end());
-    std::uniform_real_distribution<double> dist_weight(0.0, maxw);
+    auto maxw = std::max_element(weights.begin(), weights.end());
+    std::uniform_real_distribution<double> dist_weight(0.0, *maxw);
 
     int index = dist_idx(gen);
     double beta = 0.0;
